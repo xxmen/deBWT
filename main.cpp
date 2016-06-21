@@ -17,9 +17,15 @@ uint32_t get_c[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
                     3};
 char dna[DNA_LEN];
 char bcode[DNA_LEN >> 2];
+uint8_t BWT[DNA_LEN + 10];
+size_t bcode_len;
 bool cmp(uint64_t a, uint64_t b)
 {
     return (a << 2) < (b << 2);
+}
+bool bcode_cmp(const uint64_t a, const uint64_t b)
+{
+    return (bcode[a >> 3] < bcode[b >> 3]);
 }
 const int kmer2_l = 2 * (KMER_LEN + 2);
 int inputSeq(char *s, char *fName)
@@ -46,7 +52,7 @@ int inputSeq(char *s, char *fName)
 }
 uint64_t kc[KMER_SUM], K[KMER_SUM];
 bool is_in[KMER_SUM], is_out[KMER_SUM];
-uint64_t occ[KMER_SUM], ind[KMER_SUM];
+uint64_t occ[KMER_SUM] = {0}, ind[KMER_SUM];
 size_t kid = 0;
 
 int binSearch(uint64_t kmer)
@@ -61,7 +67,7 @@ int main(int argc, const char * argv[])
     char fDNAname[] = "/Users/os/Desktop/deBWT/E.coli.fa";
     int dna_len = inputSeq(dna, fDNAname);
     FILE *fKmer;
-    fKmer = fopen("/Users/os/Desktop/mer_counts_dumps.fa", "r");
+    fKmer = fopen("/Users/os/Desktop/deBWT/mer_counts_dumps.fa", "r");
     uint32_t cnt = 0;
     char kmer[22];
     size_t id = 0;
@@ -78,7 +84,10 @@ int main(int argc, const char * argv[])
         kmer_cnt |= kcnt;
         kc[id++] = kmer_cnt;
     }
+    printf("Sort start = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
     sort(kc, kc + KMER_SUM, cmp);
+
+    printf("Sort finish = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
 
     printf("%d %d\n", id, KMER_SUM);
 
@@ -152,9 +161,9 @@ int main(int argc, const char * argv[])
 
     uint64_t kmer_value = 0;
     uint64_t MASK = (1L << (2 * KMER_LEN)) - 1;
-    size_t bcode_len = 1;
+    bcode_len = 1;
     uint64_t t_index = 0, tk;
-    cout<<bitset<64>(MASK)<<endl;
+
     for (int i = 0, pos; i < dna_len; i++)
     {
 
@@ -191,67 +200,139 @@ int main(int argc, const char * argv[])
     bcode[bcode_len] = '\0';
 
 
-    for (size_t i = 0, j, tmp_index=0, l_index=0, index; i<k2len;)
+    size_t tmp_index = 0;
+    size_t bwt_index = 0;
+
+    uint64_t mask_char = (1L << 3) - 1;
+    uint64_t tmp = 0;
+
+    for (size_t i = 0; i < KMER_LEN; ++i)
+        tmp = (tmp << 2) | get_c[dna[i]];
+    uint64_t begin_kmer = tmp << (64 - 2 * KMER_LEN) >> 2;
+
+    uint64_t *last_string;
+    last_string = new uint64_t[KMER_LEN + 1];
+    tmp = 0;
+    for (size_t i = KMER_LEN + 1; i >= 1; --i)
     {
-        //find the io_info and check if mulip in
-        j = i+1;
-        uint64_t now_kmer = K2[i]&mask_c;
-        while (l_index < kmer+1 && (last_string[l_index]&mask_c) <= now_kmer)
-        {
-            BWT[bwt_index++] = ((last_string[l_index++]&mask_l)>>62);
-            // BWT[bwt_index-1] = 4;
-        }
+        for (size_t j = dna_len - i; j < dna_len; ++j)
+            tmp = (tmp << 2) | get_c[dna[j]];
+        last_string[KMER_LEN + 1 - i] = tmp << (64 - (i) * 2);
+    }
+    sort(last_string, last_string + KMER_LEN + 1, cmp);
+
+    uint64_t last_kmer = 0;
+
+    /*
+    for (size_t i = 0, j, l_index = 0, index; i < KMER_SUM; )
+    {
+        uint64_t now_kmer = kc[i] & mask_k;
+
+        while (l_index < KMER_LEN + 1 && (last_string[l_index] & mask_k) <= now_kmer)
+            BWT[bwt_index++] = ((last_string[l_index++] & mask_l) >> 62);
+
+        bool in_flag = false;
         if (now_kmer >= begin_kmer && begin_kmer >= last_kmer)
         {
-            if (now_kmer == begin_kmer)
+            BWT[bwt_index++] = 4;
+        }
+
+        last_kmer = now_kmer;
+
+        if (now_kmer != (kc[i + 1] & mask_k))    //Case 1
+        {
+            int tmp_cnt = kc[i] & mask_n;
+            uint8_t tmp_code = ((kc[i] & mask_l) >> 62);
+            while (tmp_cnt--)
+                BWT[bwt_index++] = tmp_code;
+            i++;
+            continue;
+        }
+        if (is_in[tmp_index] || in_flag)                           //Case 3
+        {
+            sort(BCN + ind[tmp_index], BCN + ind[tmp_index] + occ[tmp_index], bcode_cmp);
+            for (size_t k = ind[tmp_index]; k < ind[tmp_index] + occ[tmp_index]; ++k)
             {
-                is_in = true;
+                BWT[bwt_index++] = BCN[k] & mask_char;
             }
-            else
+        }
+        else                                           //Case 2
+        {
+            size_t tmp_cnt = occ[tmp_index];
+            uint8_t tmp_code = ((kc[i] & mask_l) >> 62);
+            while (tmp_cnt--)
             {
+                BWT[bwt_index++] = tmp_code;
+            }
+        }
+        tmp_index++;
+        for (j = i + 1; j < KMER_SUM && (kc[j] & mask_k) == now_kmer; )
+            j++;
+        i = j;
+    }*/
+    for (size_t i = 0, j, tmp_index=0, l_index = 0, index; i < KMER_SUM;)
+    {
+        bool is_in1 = false, is_out1 = false;
+        uint64_t tmp_mask = 0;
+        j = i+1;
+        uint64_t now_kmer = kc[i] & mask_k;
+        while (l_index < KMER_LEN+1 && (last_string[l_index]&mask_k) <= now_kmer)
+            BWT[bwt_index++] = ((last_string[l_index++]&mask_l)>>62);
+        if (now_kmer >= begin_kmer && begin_kmer >= last_kmer)
+        {
                 BWT[bwt_index++] = 4;
-            }
             //else if the begin_kmer no appear in K2, no need to create the io_info of begin_kmer
         }
         last_kmer = now_kmer;
-        while (j<k2len && ((K2[j]&mask_c) == now_kmer))
+        while (j<KMER_SUM && ((kc[j]&mask_k) == now_kmer))
         {
-            if ((K2[j]&mask_l) != (K2[i]&mask_l)) is_in = true;
-            if ((K2[j]&mask_r) !=( K2[i]&mask_r)) is_out = true;
+            if ((kc[j]&mask_l) != (kc[i]&mask_l)) is_in1 = true;
+            if ((kc[j]&mask_r) !=( kc[i]&mask_r)) is_out1 = true;
             ++j;
         }
-        if (is_in || is_out)
-            tmp_mask = io_info[tmp_index++];
-        if (is_in)
-        {
-            BCN_index = (tmp_mask&mask_index);
-            BCN_len = ((tmp_mask&mask_in) >> 32);
 
-            sort(BCN+BCN_index, BCN+BCN_index+BCN_len, bwt_cmp);
+        if (is_in1)
+        {
+            size_t  BCN_index = ind[tmp_index];
+            size_t  BCN_len = occ[tmp_index];
+
+            sort(BCN+BCN_index, BCN+BCN_index+BCN_len, bcode_cmp);
 
             for (size_t k=BCN_index; k<BCN_index+BCN_len; ++k)
             {
-                BWT[bwt_index++] = BCN[k]&mask_code;
+                BWT[bwt_index++] = BCN[k]&mask_char;
             }
         }
         else
         {
-            tmp_num=0;
-            for (size_t k = i; k<j; ++k)
+            uint64_t  tmp_num=0;
+            for (size_t k = i; k < j; ++k)
             {
-                tmp_num += (K2[k]&mask_n);
+                tmp_num += (kc[k]&mask_n);
             }
-            tmp_code = ((K2[i]&mask_l)>>62);
+            uint64_t tmp_code = ((kc[i]&mask_l)>>62);
             while (tmp_num--)
             {
                 BWT[bwt_index++] = tmp_code;
             }
         }
+        if (is_in1 || is_out1)
+            tmp_index++;
         i = j;
     }
-
-    printf("%d\n", bcode_len);
+    printf("bcode_len = %d\n", bcode_len);
     printf("%d   %d\n", cnt_in, cnt_out);
+
+    cout<<bwt_index<<"  "<<dna_len<<endl;
+    FILE *fout = fopen("/Users/os/Desktop/deBWT/res.bwt","w");
+    char cc[6]={'A', 'C', 'G', 'T', '$', 'X'};
+    for (size_t i = 0; i <= dna_len; ++i)
+    {
+        fprintf(fout, "%c", cc[BWT[i]]);
+        if ((i+1) % 80 == 0)
+            fprintf(fout, "\n");
+    }
+
     printf("Time used = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
     return 0;
 }
