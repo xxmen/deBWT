@@ -1,4 +1,4 @@
-#!/bin/bash
+#! /usr/bin/env bash
 d_file=$1
 declare -i kmer = $2
 declare -i kmer2 = $kmer+2
