@@ -5,18 +5,19 @@
 #include <cmath>
 #include <algorithm>
 #include <ctime>
-#include <map>
+#include <unistd.h>
 #define DNA_LEN 5000000
-#define KMER_LEN 20
 #define MAX_KMER_SUM 5000000
 using namespace std;
 uint32_t get_c[255] = {0};
 uint32_t KMER_SUM;
 char dna[DNA_LEN];
 char bcode[DNA_LEN >> 2];
+uint32_t dna_len;
 uint8_t BWT[DNA_LEN + 10];
 size_t bcode_len;
 uint64_t MultiIn_INFO[10000];
+uint32_t KMER_LEN = 20;
 bool cmp(uint64_t a, uint64_t b)
 {
     return (a << 2) < (b << 2);
@@ -26,13 +27,13 @@ bool bcode_cmp(const uint64_t a, const uint64_t b)
     return (bcode[a >> 3] < bcode[b >> 3]);
 }
 const int kmer2_l = 2 * (KMER_LEN + 2);
-int inputSeq(char *s, char *fName)
+uint32_t inputSeq(char *s, char *fName)
 {
 
     FILE *fp;
     if((fp = fopen(fName, "r")) == NULL)
     {
-        printf("文件不存在.\n");
+        printf("DNA File Not Found.\n");
         exit(1);
     }
     else
@@ -41,12 +42,10 @@ int inputSeq(char *s, char *fName)
         fgets(info, 100, fp);
         uint32_t i = 0;
         while (~fscanf(fp, "%s", s + i * 70))
-        {
             i++;
-        }
         fclose(fp);
     }
-    return (int)strlen(s);
+    return (uint32_t)strlen(s);
 }
 uint64_t kc[MAX_KMER_SUM], K[MAX_KMER_SUM];
 bool is_in[100000], is_out[100000];
@@ -59,55 +58,17 @@ int binSearch(uint64_t kmer)
     pos = lower_bound(K, K + kid, kmer) - K;
     return (int) (K[pos] == kmer ? pos : -1);
 }
-
-int main(int argc, const char * argv[])
+uint64_t mask_k = 1L, mask_l = -1L, mask_r = 1L, mask_n = 1L;
+uint32_t tot = 0;
+void getMultiIn_Out()
 {
-    get_c['C'] = 1;get_c['G'] = 2; get_c['T'] = 3;
-    char fDNAname[] = "/Users/os/Desktop/deBWT/E.coli.fa";
-    int dna_len = inputSeq(dna, fDNAname);
-    FILE *fKmer;
-    fKmer = fopen("/Users/os/Desktop/deBWT/mer_counts_dumps.fa", "r");
-    uint32_t cnt = 0;
-    char kmer[22];
-    size_t id = 0;
-    while (~fscanf(fKmer, ">%d\n", &cnt))
-    {
-        uint64_t kmer_cnt = 0;
-        fscanf(fKmer, "%s\n", kmer);
-        for (int i = 0; i < KMER_LEN + 2; i++)
-        {
-            kmer_cnt = (kmer_cnt << 2) | get_c[kmer[i]];
-        }
-        uint64_t kcnt = cnt;
-        kmer_cnt <<= (64 - 2 * (KMER_LEN + 2));
-        kmer_cnt |= kcnt;
-        kc[id++] = kmer_cnt;
-    }
-    printf("Sort start = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
-
-    KMER_SUM = id;
-    sort(kc, kc + KMER_SUM, cmp);
-
-    printf("Sort finish = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
-
-    uint64_t mask_k = 1L, mask_l = -1L, mask_r = 1L, mask_n = 1L;
     size_t cnt_len = 64 - 2 * (KMER_LEN + 2);
     mask_k = ((mask_k << 62) - 1) >> (cnt_len + 2) << (cnt_len + 2);
-
     mask_l = (mask_l >> 62) << 62;
-
     mask_r = ((mask_r << (64 - 2 * (KMER_LEN + 2) + 2)) - 1) >> cnt_len << cnt_len;
-
     mask_n =  (mask_n << cnt_len) - 1;
 
-    uint64_t x = mask_k;
-
-    //cout<<bitset<64>(x)<<endl;
-
-    uint32_t theindex = 0;
-
     uint32_t cnt_in = 0, cnt_out = 0;
-
     for (size_t i = 0, j, k; i < KMER_SUM; )
     {
         uint64_t now_kmer = kc[i] & mask_k;
@@ -130,9 +91,7 @@ int main(int argc, const char * argv[])
         if (multi_in || multi_out)
         {
             for (k = i; k < j; ++k)
-            {
                 occ[kid] += (kc[k] & mask_n);
-            }
             if (multi_out)
             {
                 is_out[kid] = true;
@@ -142,22 +101,19 @@ int main(int argc, const char * argv[])
             {
                 is_in[kid] = true;
                 cnt_in ++;
-                ind[kid] =  theindex;
-                theindex += occ[kid];
+                ind[kid] =  tot;
+                tot += occ[kid];
             }
-
             K[kid] = (kc[i] & mask_k) >> (cnt_len + 2);
             ++kid;
         }
-
         i = j;
     }
-
-    //for (int i = kid - 1; i >  kid - 20; i--)
-     //   printf("%llu\n", K[i]);
-
-    uint32_t MultiIn_INFO_size = theindex;
-
+    printf("cnt_in = %d   cnt_out = %d\n", cnt_in, cnt_out);
+}
+void buildBranchCode()
+{
+    uint32_t MultiIn_INFO_size = tot;
     uint64_t kmer_value = 0;
     uint64_t MASK = (1L << (2 * KMER_LEN)) - 1;
     bcode_len = 1;
@@ -165,13 +121,11 @@ int main(int argc, const char * argv[])
 
     for (int i = 0, pos; i < dna_len; i++)
     {
-
         kmer_value = (kmer_value << 2) | get_c[dna[i]];
         kmer_value &= MASK;
 
         if (i >= KMER_LEN - 1)
         {
-            //printf("%llu\n", kmer_value);
             pos = binSearch(kmer_value);
             //printf("%d\n", pos);
             if (pos != -1)
@@ -195,13 +149,12 @@ int main(int argc, const char * argv[])
 
         }
     }
-
     bcode[bcode_len] = '\0';
-
-
-    size_t tmp_index = 0;
-    size_t bwt_index = 0;
-
+    printf("bcode_len = %lu\n", bcode_len);
+}
+void getBWT()
+{
+    //int Len2 = 0, Len1 = 0, Len3 = 0;
     uint64_t mask_char = (1L << 3) - 1;
     uint64_t tmp = 0;
 
@@ -220,10 +173,9 @@ int main(int argc, const char * argv[])
     }
     sort(last_string, last_string + KMER_LEN + 1, cmp);
 
+    size_t tmp_index = 0;
+    size_t bwt_index = 0;
     uint64_t last_kmer = 0;
-
-
-    int Len2 = 0, Len1 = 0, Len3 = 0;
     for (size_t i = 0, j, l_index = 0, index; i < KMER_SUM; )
     {
         uint64_t now_kmer = kc[i] & mask_k;
@@ -232,16 +184,13 @@ int main(int argc, const char * argv[])
             BWT[bwt_index++] = ((last_string[l_index++] & mask_l) >> 62);
 
         if (now_kmer >= begin_kmer && begin_kmer >= last_kmer)
-        {
             BWT[bwt_index++] = 4;
-        }
 
         last_kmer = now_kmer;
-
         if (now_kmer != (kc[i + 1] & mask_k))    //Case 1
         {
             int tmp_cnt = kc[i] & mask_n;
-            Len1 += tmp_cnt;
+            //Len1 += tmp_cnt;
             uint8_t tmp_code = ((kc[i] & mask_l) >> 62);
             while (tmp_cnt--)
                 BWT[bwt_index++] = tmp_code;
@@ -250,7 +199,7 @@ int main(int argc, const char * argv[])
         }
         if (is_in[tmp_index])                           //Case 3
         {
-            Len3 += occ[tmp_index];
+            //Len3 += occ[tmp_index];
             sort(MultiIn_INFO + ind[tmp_index], MultiIn_INFO + ind[tmp_index] + occ[tmp_index], bcode_cmp);
             for (size_t k = ind[tmp_index]; k < ind[tmp_index] + occ[tmp_index]; ++k)
             {
@@ -260,12 +209,10 @@ int main(int argc, const char * argv[])
         else                                           //Case 2
         {
             size_t tmp_cnt = occ[tmp_index];
-            Len2 += tmp_cnt;
+            //Len2 += tmp_cnt;
             uint8_t tmp_code = ((kc[i] & mask_l) >> 62);
             while (tmp_cnt--)
-            {
                 BWT[bwt_index++] = tmp_code;
-            }
         }
         tmp_index++;
 
@@ -273,12 +220,81 @@ int main(int argc, const char * argv[])
             j++;
         i = j;
     }
-    printf("len1 = %d  len2 = %d len3 = %d\n", Len1, Len2, Len3);
-    printf("bcode_len = %lu\n", bcode_len);
-    printf("%d   %d\n", cnt_in, cnt_out);
+    //printf("len1 = %d  len2 = %d len3 = %d\n", Len1, Len2, Len3);
+    cout<<"BWT len= "<<bwt_index<<"  dna len = "<<dna_len<<endl;
+}
+int main(int argc, char ** argv)
+{
+    get_c['C'] = 1;get_c['G'] = 2; get_c['T'] = 3;
+    char fDNAname[100] = "E.coli.fa";
+    char fMerCount[100] = "mer_counts_dumps.fa";
+    char outFile[100] = "res.bwt"; 
+    int c;
+    while ((c = getopt (argc, argv, "k:d:m:o:h")) != -1) 
+    {
+        switch (c)
+        {
+            case 'k':
+                if (optarg)
+                    KMER_LEN = atol(optarg);
+                break;
+            case 'd':
+                if (optarg)
+                    strcpy(fDNAname, optarg);
+                break;
+            case 'm':
+                if (optarg)
+                    strcpy(fMerCount, optarg);
+                break;
+            case 'o':
+                if (optarg)
+                    strcpy(outFile, optarg);
+                break;
+            case 'h':
+                printf("\tbuild BWT [option]\n");
+                printf("\t-k \t  Kmer Length             [%lu]\n", (unsigned long)KMER_LEN);
+                printf("\t-d \t  DNA File                [%s]\n", fDNAname);
+                printf("\t-m \t  Mer Counts File         [%s]\n", fMerCount);
+                printf("\t-o \t  BWT Sequence File       [%s]\n", outFile);
+                printf("\t-h \t  Help\n");
+                return 0;
+                break;
+            default:
+                abort ();
+        }
+    }
 
-    cout<<bwt_index<<"  "<<dna_len<<endl;
-    FILE *fout = fopen("/Users/os/Desktop/deBWT/res.bwt","w");
+    dna_len = inputSeq(dna, fDNAname);
+    FILE *fKmer;
+    fKmer = fopen(fMerCount, "r");
+    uint32_t cnt = 0;
+    char kmer[22];
+    size_t id = 0;
+    while (~fscanf(fKmer, ">%d\n", &cnt))
+    {
+        uint64_t kmer_cnt = 0;
+        fscanf(fKmer, "%s\n", kmer);
+        for (int i = 0; i < KMER_LEN + 2; i++)
+            kmer_cnt = (kmer_cnt << 2) | get_c[kmer[i]];
+        uint64_t kcnt = cnt;
+        kmer_cnt <<= (64 - 2 * (KMER_LEN + 2));
+        kmer_cnt |= kcnt;
+        kc[id++] = kmer_cnt;
+    }
+    printf("Sort start = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
+    KMER_SUM = id;
+    sort(kc, kc + KMER_SUM, cmp);
+
+    printf("Sort finish = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
+
+    getMultiIn_Out();
+
+    buildBranchCode();
+
+    getBWT();
+
+    FILE *fout = fopen(outFile,"w");
+    fprintf(fout, "Input Sequence File: %s\n", fDNAname);
     char cc[6]={'A', 'C', 'G', 'T', '$', 'X'};
     for (size_t i = 0; i <= dna_len; ++i)
     {
