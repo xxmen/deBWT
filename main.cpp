@@ -8,13 +8,10 @@
 #include <map>
 #define DNA_LEN 5000000
 #define KMER_LEN 20
-#define KMER_SUM 4864385
+#define MAX_KMER_SUM 5000000
 using namespace std;
-uint32_t get_c[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    3};
+uint32_t get_c[255] = {0};
+uint32_t KMER_SUM;
 char dna[DNA_LEN];
 char bcode[DNA_LEN >> 2];
 uint8_t BWT[DNA_LEN + 10];
@@ -51,9 +48,9 @@ int inputSeq(char *s, char *fName)
     }
     return (int)strlen(s);
 }
-uint64_t kc[KMER_SUM], K[KMER_SUM];
-bool is_in[KMER_SUM], is_out[KMER_SUM];
-uint64_t occ[KMER_SUM] = {0}, ind[KMER_SUM];
+uint64_t kc[MAX_KMER_SUM], K[MAX_KMER_SUM];
+bool is_in[100000], is_out[100000];
+uint64_t occ[MAX_KMER_SUM] = {0}, ind[MAX_KMER_SUM];
 size_t kid = 0;
 
 int binSearch(uint64_t kmer)
@@ -65,6 +62,7 @@ int binSearch(uint64_t kmer)
 
 int main(int argc, const char * argv[])
 {
+    get_c['C'] = 1;get_c['G'] = 2; get_c['T'] = 3;
     char fDNAname[] = "/Users/os/Desktop/deBWT/E.coli.fa";
     int dna_len = inputSeq(dna, fDNAname);
     FILE *fKmer;
@@ -86,11 +84,11 @@ int main(int argc, const char * argv[])
         kc[id++] = kmer_cnt;
     }
     printf("Sort start = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
+
+    KMER_SUM = id;
     sort(kc, kc + KMER_SUM, cmp);
 
     printf("Sort finish = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
-
-    printf("%d %d\n", id, KMER_SUM);
 
     uint64_t mask_k = 1L, mask_l = -1L, mask_r = 1L, mask_n = 1L;
     size_t cnt_len = 64 - 2 * (KMER_LEN + 2);
@@ -276,7 +274,7 @@ int main(int argc, const char * argv[])
         i = j;
     }
     printf("len1 = %d  len2 = %d len3 = %d\n", Len1, Len2, Len3);
-    printf("bcode_len = %d\n", bcode_len);
+    printf("bcode_len = %lu\n", bcode_len);
     printf("%d   %d\n", cnt_in, cnt_out);
 
     cout<<bwt_index<<"  "<<dna_len<<endl;
