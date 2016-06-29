@@ -19,6 +19,7 @@ char dna[DNA_LEN];
 char bcode[DNA_LEN >> 2];
 uint8_t BWT[DNA_LEN + 10];
 size_t bcode_len;
+uint64_t MultiIn_INFO[10000];
 bool cmp(uint64_t a, uint64_t b)
 {
     return (a << 2) < (b << 2);
@@ -105,7 +106,7 @@ int main(int argc, const char * argv[])
 
     //cout<<bitset<64>(x)<<endl;
 
-    size_t theindex = 0;
+    uint32_t theindex = 0;
 
     uint32_t cnt_in = 0, cnt_out = 0;
 
@@ -130,6 +131,10 @@ int main(int argc, const char * argv[])
 
         if (multi_in || multi_out)
         {
+            for (k = i; k < j; ++k)
+            {
+                occ[kid] += (kc[k] & mask_n);
+            }
             if (multi_out)
             {
                 is_out[kid] = true;
@@ -139,25 +144,21 @@ int main(int argc, const char * argv[])
             {
                 is_in[kid] = true;
                 cnt_in ++;
-                for (k = i; k < j; ++k)
-                {
-                    occ[kid] += (kc[k] & mask_n);
-                }
                 ind[kid] =  theindex;
                 theindex += occ[kid];
             }
+
             K[kid] = (kc[i] & mask_k) >> (cnt_len + 2);
             ++kid;
         }
+
         i = j;
     }
 
     //for (int i = kid - 1; i >  kid - 20; i--)
      //   printf("%llu\n", K[i]);
 
-    size_t BCN_size = (theindex);
-    uint64_t *BCN;
-    BCN = new uint64_t[BCN_size];
+    uint32_t MultiIn_INFO_size = theindex;
 
     uint64_t kmer_value = 0;
     uint64_t MASK = (1L << (2 * KMER_LEN)) - 1;
@@ -181,12 +182,12 @@ int main(int argc, const char * argv[])
                 {
                     t_index = ind[pos];
                     tk = t_index;
-                    while (tk < BCN_size && BCN[tk])
+                    while (tk < MultiIn_INFO_size && MultiIn_INFO[tk])
                         tk++;
                     if (i >= KMER_LEN)
-                        BCN[tk] = (bcode_len << 3) | get_c[dna[i - KMER_LEN]];
+                        MultiIn_INFO[tk] = (bcode_len << 3) | get_c[dna[i - KMER_LEN]];
                     else
-                        BCN[tk] = (bcode_len << 3) | 4; //"$"
+                        MultiIn_INFO[tk] = (bcode_len << 3) | 4; //"$"
                 }
                 if (is_out[pos])
                 {
@@ -223,7 +224,8 @@ int main(int argc, const char * argv[])
 
     uint64_t last_kmer = 0;
 
-    /*
+
+    int Len2 = 0, Len1 = 0, Len3 = 0;
     for (size_t i = 0, j, l_index = 0, index; i < KMER_SUM; )
     {
         uint64_t now_kmer = kc[i] & mask_k;
@@ -231,7 +233,6 @@ int main(int argc, const char * argv[])
         while (l_index < KMER_LEN + 1 && (last_string[l_index] & mask_k) <= now_kmer)
             BWT[bwt_index++] = ((last_string[l_index++] & mask_l) >> 62);
 
-        bool in_flag = false;
         if (now_kmer >= begin_kmer && begin_kmer >= last_kmer)
         {
             BWT[bwt_index++] = 4;
@@ -242,23 +243,26 @@ int main(int argc, const char * argv[])
         if (now_kmer != (kc[i + 1] & mask_k))    //Case 1
         {
             int tmp_cnt = kc[i] & mask_n;
+            Len1 += tmp_cnt;
             uint8_t tmp_code = ((kc[i] & mask_l) >> 62);
             while (tmp_cnt--)
                 BWT[bwt_index++] = tmp_code;
             i++;
             continue;
         }
-        if (is_in[tmp_index] || in_flag)                           //Case 3
+        if (is_in[tmp_index])                           //Case 3
         {
-            sort(BCN + ind[tmp_index], BCN + ind[tmp_index] + occ[tmp_index], bcode_cmp);
+            Len3 += occ[tmp_index];
+            sort(MultiIn_INFO + ind[tmp_index], MultiIn_INFO + ind[tmp_index] + occ[tmp_index], bcode_cmp);
             for (size_t k = ind[tmp_index]; k < ind[tmp_index] + occ[tmp_index]; ++k)
             {
-                BWT[bwt_index++] = BCN[k] & mask_char;
+                BWT[bwt_index++] = MultiIn_INFO[k] & mask_char;
             }
         }
         else                                           //Case 2
         {
             size_t tmp_cnt = occ[tmp_index];
+            Len2 += tmp_cnt;
             uint8_t tmp_code = ((kc[i] & mask_l) >> 62);
             while (tmp_cnt--)
             {
@@ -266,60 +270,12 @@ int main(int argc, const char * argv[])
             }
         }
         tmp_index++;
+
         for (j = i + 1; j < KMER_SUM && (kc[j] & mask_k) == now_kmer; )
             j++;
         i = j;
-    }*/
-    for (size_t i = 0, j, tmp_index=0, l_index = 0, index; i < KMER_SUM;)
-    {
-        bool is_in1 = false, is_out1 = false;
-        uint64_t tmp_mask = 0;
-        j = i+1;
-        uint64_t now_kmer = kc[i] & mask_k;
-        while (l_index < KMER_LEN+1 && (last_string[l_index]&mask_k) <= now_kmer)
-            BWT[bwt_index++] = ((last_string[l_index++]&mask_l)>>62);
-        if (now_kmer >= begin_kmer && begin_kmer >= last_kmer)
-        {
-                BWT[bwt_index++] = 4;
-            //else if the begin_kmer no appear in K2, no need to create the io_info of begin_kmer
-        }
-        last_kmer = now_kmer;
-        while (j<KMER_SUM && ((kc[j]&mask_k) == now_kmer))
-        {
-            if ((kc[j]&mask_l) != (kc[i]&mask_l)) is_in1 = true;
-            if ((kc[j]&mask_r) !=( kc[i]&mask_r)) is_out1 = true;
-            ++j;
-        }
-
-        if (is_in1)
-        {
-            size_t  BCN_index = ind[tmp_index];
-            size_t  BCN_len = occ[tmp_index];
-
-            sort(BCN+BCN_index, BCN+BCN_index+BCN_len, bcode_cmp);
-
-            for (size_t k=BCN_index; k<BCN_index+BCN_len; ++k)
-            {
-                BWT[bwt_index++] = BCN[k]&mask_char;
-            }
-        }
-        else
-        {
-            uint64_t  tmp_num=0;
-            for (size_t k = i; k < j; ++k)
-            {
-                tmp_num += (kc[k]&mask_n);
-            }
-            uint64_t tmp_code = ((kc[i]&mask_l)>>62);
-            while (tmp_num--)
-            {
-                BWT[bwt_index++] = tmp_code;
-            }
-        }
-        if (is_in1 || is_out1)
-            tmp_index++;
-        i = j;
     }
+    printf("len1 = %d  len2 = %d len3 = %d\n", Len1, Len2, Len3);
     printf("bcode_len = %d\n", bcode_len);
     printf("%d   %d\n", cnt_in, cnt_out);
 
