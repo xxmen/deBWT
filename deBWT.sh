@@ -13,9 +13,4 @@ echo "Count Kmers use  : $runtime 's"
 
 (make)
 
-start=$end
 ./deBWT -k $kmer -d $d_file -m mer_counts_dumps.fa
-
-end=`date +%s`
-runtime=$((end-start))
-echo "Build BWT use : $runtime 's"

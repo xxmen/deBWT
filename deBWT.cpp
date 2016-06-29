@@ -221,7 +221,7 @@ void getBWT()
         i = j;
     }
     //printf("len1 = %d  len2 = %d len3 = %d\n", Len1, Len2, Len3);
-    cout<<"BWT len= "<<bwt_index<<"  dna len = "<<dna_len<<endl;
+    printf("BWT len = %lu dna len = %d\n", bwt_index, dna_len);
 }
 int main(int argc, char ** argv)
 {
@@ -251,7 +251,7 @@ int main(int argc, char ** argv)
                     strcpy(outFile, optarg);
                 break;
             case 'h':
-                printf("\tbuild BWT [option]\n");
+                printf("\tUsage: deBWT [options] arg...\n");
                 printf("\t-k \t  Kmer Length             [%lu]\n", (unsigned long)KMER_LEN);
                 printf("\t-d \t  DNA File                [%s]\n", fDNAname);
                 printf("\t-m \t  Mer Counts File         [%s]\n", fMerCount);
@@ -281,11 +281,11 @@ int main(int argc, char ** argv)
         kmer_cnt |= kcnt;
         kc[id++] = kmer_cnt;
     }
-    printf("Sort start = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
+    //printf("Sort start = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
     KMER_SUM = id;
     sort(kc, kc + KMER_SUM, cmp);
 
-    printf("Sort finish = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
+    //printf("Sort finish = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
 
     getMultiIn_Out();
 
@@ -303,6 +303,6 @@ int main(int argc, char ** argv)
             fprintf(fout, "\n");
     }
 
-    printf("Time used = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
+    printf("Build BWT Time use = %.2f s\n",  (double)clock() / CLOCKS_PER_SEC);
     return 0;
 }
